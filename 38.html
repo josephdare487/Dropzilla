@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dropzilla Crash Demo</title>
+  <style>
+    body {
+      background-color: #0c1d17;
+      color: #ffffff;
+      font-family: 'Segoe UI', sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #00ff99;
+      margin-bottom: 10px;
+    }
+
+    #balanceDisplay {
+      font-size: 18px;
+      margin-bottom: 20px;
+    }
+
+    #history {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .history-item {
+      padding: 6px 10px;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 14px;
+      color: black;
+    }
+
+    .red { background-color: #ff4c4c; }
+    .yellow { background-color: #ffcc00; }
+    .green { background-color: #00ff99; }
+
+    #multiplier {
+      font-size: 40px;
+      margin: 20px 0 10px;
+      color: #00ff99;
+      font-weight: bold;
+    }
+
+    .crashed {
+      color: red !important;
+    }
+
+    .cashedout {
+      color: gold !important;
+    }
+
+    canvas {
+      background: #142a23;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+
+    .controls {
+      margin-bottom: 20px;
+    }
+
+    input, button {
+      padding: 10px 15px;
+      margin: 5px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: none;
+    }
+
+    input {
+      width: 100px;
+    }
+
+    button {
+      background-color: #00ff99;
+      color: #000;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      background-color: #00cc77;
+    }
+
+    button:disabled {
+      background-color: #555;
+      cursor: not-allowed;
+    }
+
+    .log {
+      max-height: 150px;
+      overflow-y: auto;
+      background: #142a23;
+      padding: 10px;
+      border-radius: 8px;
+      text-align: left;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔥 Dropzilla Crash Demo</h1>
+
+  <div id="balanceDisplay">Balance: 100000 DZL</div>
+
+  <div id="history"></div>
+
+  <div id="multiplier">1.00x</div>
+  <canvas id="chart" width="800" height="400"></canvas>
+
+  <div class="controls">
+    <input type="number" id="betAmount" placeholder="Bet" />
+    <button id="startBtn">Start</button>
+    <button id="cashoutBtn">💸 Cash Out</button>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <script>
+    const canvas = document.getElementById('chart');
+    const ctx = canvas.getContext('2d');
+    const multiplierText = document.getElementById('multiplier');
+    const historyContainer = document.getElementById('history');
+
+    let time = 0;
+    let points = [];
+    let multiplier = 1.00;
+    let isCrashed = false;
+    let isCashedOut = false;
+    let crashPoint = 0;
+    let userBalance = 100000;
+    let gameRunning = false;
+    let currentBet = 0;
+    let gameSpeed = 60;
+
+    let history = [];
+
+    function getRandomCrashPoint() {
+      const r = Math.random();
+      if (r < 0.02) return 1.01;
+      return Math.max(1.2, Math.pow(Math.random(), -1.5));
+    }
+
+    function drawGraph() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height);
+      points.forEach(([x, y]) => {
+        ctx.lineTo(x, canvas.height - y);
+      });
+      ctx.strokeStyle = isCrashed ? 'red' : '#00ff99';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    function gameLoop() {
+      if (isCrashed) return;
+
+      time += 0.015; // سرعت ضریب تغییر یافته
+      multiplier = (1 + time * 0.1);
+      multiplierText.textContent = multiplier.toFixed(2) + 'x';
+
+      if (multiplier >= crashPoint) {
+        isCrashed = true;
+        gameRunning = false;
+        setButtonStates(false);
+        multiplierText.classList.add('crashed');
+        if (!isCashedOut) {
+          logMessage(`💥 CRASHED at ${multiplier.toFixed(2)}x – You lost ${currentBet} DZL`);
+        } else {
+          logMessage(`🚩 Round ended at ${multiplier.toFixed(2)}x`);
+        }
+        addToHistory(multiplier);
+        return;
+      }
+
+      const x = time * gameSpeed;
+      const y = (multiplier - 1) * 200;
+
+      if (x < canvas.width) {
+        points.push([x, y]);drawGraph();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+      if (gameRunning) return;
+
+      const bet = parseFloat(document.getElementById("betAmount").value);
+      if (!bet || bet <= 0) return alert("Enter valid bet");
+      if (bet > userBalance) return alert("❌ Not enough balance!");
+
+      currentBet = bet;
+      userBalance -= bet;
+      updateBalance();
+
+      time = 0;
+      points = [];
+      isCrashed = false;
+      isCashedOut = false;
+      multiplier = 1.00;
+      crashPoint = getRandomCrashPoint();
+      gameRunning = true;
+
+      multiplierText.className = '';
+      logMessage(`🟢 Game started – Bet: ${bet} DZL`);
+      setButtonStates(true);
+      gameLoop();
+    }
+
+    function manualCashOut() {
+      if (!gameRunning || isCashedOut) return;
+      const win = currentBet * multiplier;
+      userBalance += win;
+      isCashedOut = true;
+      setButtonStates(true, true);
+      updateBalance();
+      multiplierText.classList.add('cashedout');
+      logMessage(`✅ Cashed out at ${multiplier.toFixed(2)}x – You won ${win.toFixed(2)} DZL`);
+    }
+
+    function updateBalance() {
+      document.getElementById("balanceDisplay").innerText = "Balance: " + userBalance.toFixed(2) + " DZL";
+    }
+
+    function setButtonStates(running, disableCashout = false) {
+      document.getElementById("startBtn").disabled = running;
+      document.getElementById("betAmount").disabled = running;
+      document.getElementById("cashoutBtn").disabled = disableCashout ? true : !running;
+    }
+
+    function logMessage(msg) {
+      const log = document.getElementById("log");
+      const p = document.createElement("p");
+      p.innerHTML = msg;
+      log.prepend(p);
+    }
+
+    function addToHistory(value) {
+      if (history.length >= 10) history.pop();
+      history.unshift(value);
+
+      historyContainer.innerHTML = '';
+      history.forEach(mult => {
+        const div = document.createElement('div');
+        div.className = 'history-item ' + (
+          mult < 2 ? 'red' :
+          mult < 3 ? 'yellow' : 'green'
+        );
+        div.textContent = mult.toFixed(2) + 'x';
+        historyContainer.appendChild(div);
+      });
+    }
+
+    window.onload = () => {
+      document.getElementById("startBtn").addEventListener("click", startGame);
+      document.getElementById("cashoutBtn").addEventListener("click", manualCashOut);
+      setButtonStates(false);
+      updateBalance();
+    };
+  </script>
+</body>
+</html>
